@@ -49,7 +49,7 @@
 
 // In 0.9.x this changed to 'tr1' (dropping sigc::bind), see https://stackoverflow.com/a/4682954/2748717
 // "C++ Technical Report 1" was later added to "C++11", using tr1 makes stuff compile on older GCC
-#define _cxxstd_ tr1
+#define _cxxstd_ std
 
 // List of system capabilities for `system.has` command
 static std::set<std::string> system_capabilities;
@@ -60,7 +60,7 @@ int log_messages_fd = -1;
 };
 
 
-#if RT_HEX_VERSION <= 0x000906
+#if RT_HEX_VERSION <= 0x000907
 // will be merged into 0.9.7+ mainline!
 
 namespace torrent {
@@ -1431,8 +1431,6 @@ void initialize_command_pyroscope() {
     CMD2_ANY_STRING("log.messages", _cxxstd_::bind(&cmd_log_messages, _cxxstd_::placeholders::_2));
     CMD2_ANY_P("import.return", &cmd_import_return);
     CMD2_ANY("do", _cxxstd_::bind(&cmd_do, _cxxstd_::placeholders::_1, _cxxstd_::placeholders::_2));
-    CMD2_DL("d.is_meta", _cxxstd_::bind(&torrent::DownloadInfo::is_meta_download,
-                                        _cxxstd_::bind(&core::Download::info, _cxxstd_::placeholders::_1)));
 
     // List capabilities of this build
     add_capability("system.has");         // self

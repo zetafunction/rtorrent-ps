@@ -48,7 +48,7 @@ else
 fi
 
 # Version selection
-export RT_MINOR=6
+export RT_MINOR=7
 export LT_VERSION=0.13.$RT_MINOR; export RT_VERSION=0.9.$RT_MINOR;
 export GIT_MINOR=$(( $RT_MINOR + 1 ))  # ensure git version has a bumped version number
 export VERSION_EXTRAS=" $git_id"
@@ -276,8 +276,9 @@ esac
 #   http://pkgs.fedoraproject.org/repo/pkgs/libtorrent/
 #   http://pkgs.fedoraproject.org/repo/pkgs/rtorrent/
 TARBALLS+=(
-"https://bintray.com/artifact/download/pyroscope/rtorrent-ps/libtorrent-$LT_VERSION.tar.gz"
-"https://bintray.com/artifact/download/pyroscope/rtorrent-ps/rtorrent-$RT_VERSION.tar.gz"
+"https://rtorrent.net/downloads/libtorrent-$LT_VERSION.tar.gz"
+"http://rtorrent.net/downloads/rtorrent-$RT_VERSION.tar.gz"
+# "https://bintray.com/artifact/download/pyroscope/rtorrent-ps/rtorrent-$RT_VERSION.tar.gz"
 )
 
 BUILD_CMD_DEPS=$(cat <<.
