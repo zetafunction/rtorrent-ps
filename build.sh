@@ -104,11 +104,8 @@ export PACKAGE_ROOT INSTALL_ROOT INSTALL_DIR BIN_DIR CURL_OPTS MAKE_OPTS CFG_OPT
 export SRC_DIR=$(cd $(dirname $0) && pwd)
 LT_PATCHES=( )
 RT_PATCHES=( )
-LT_BASE_PATCHES=( $SRC_DIR/patches/lt-base-cppunit-pkgconfig.patch )
-RT_BASE_PATCHES=(
-    $SRC_DIR/patches/rt-base-cppunit-pkgconfig.patch
-    $SRC_DIR/patches/rt-base-configure.patch
-    )
+LT_BASE_PATCHES=( $SRC_DIR/patches/lt-meh.patch )
+RT_BASE_PATCHES=( $SRC_DIR/patches/rt-base-configure.patch )
 
 # Distro specifics
 case $(echo -n "$(lsb_release -sic 2>/dev/null || echo NonLSB)" | tr ' \n' '-') in
@@ -172,14 +169,6 @@ elif command which gcc >/dev/null; then
 else
     GCC_TYPE=none
 fi
-
-# Hack to prevent libtorrent from breaking the XMLRPC-C autoconf test.
-# -ltorrent is (incorrectly?) specified in LIBS when linking the XMLRPC-C test
-# program, causing the linker to use non-exported symbols in libtorrent, which
-# results in a link error. -O2 seems to work around this by eliminating
-# libtorrent as dead code from the test program.
-CFLAGS="${CFLAGS} -g -O2"
-CXXFLAGS="${CXXFLAGS} -g -O2"
 
 # Set C++ standard support
 cpp_std=""
