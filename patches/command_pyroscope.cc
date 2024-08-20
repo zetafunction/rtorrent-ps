@@ -250,79 +250,6 @@ int64_t get_active_tracker_scrape_info(const int operation, torrent::Download* i
     return scrape_num;
 }
 
-
-/*  @DOC
-    `compare = <order>, <sort_key>=[, ...]`
-
-    Compares two items like `less=` or `greater=`, but allows to compare
-    by several different sort criteria, and ascending or descending
-    order per given field. The first parameter is a string of order
-    indicators, either `aA+` for ascending or `dD-` for descending.
-    The default, i.e. when there's more fields than indicators, is
-    ascending. Field types other than value or string are treated
-    as equal (or in other words, they're ignored).
-
-    If all fields are equal, then items are ordered in a random, but
-    stable fashion.
-
-    Configuration example:
-
-        # VIEW: Show active and incomplete torrents (in view #9) and update every 20 seconds
-        #       Items are grouped into complete, incomplete, and queued, in that order.
-        #       Within each group, they're sorted by upload and then download speed.
-        view.sort_current = active,"compare=----,d.is_open=,d.complete=,d.up.rate=,d.down.rate="
-        schedule = filter_active,12,20,"view.filter = active,\"or={d.up.rate=,d.down.rate=,not=$d.complete=}\" ;view.sort=active"
-*/
-torrent::Object apply_compare(rpc::target_type target, const torrent::Object::list_type& args) {
-    if (!rpc::is_target_pair(target))
-        throw torrent::input_error("Can only compare a target pair.");
-
-    if (args.size() < 2)
-        throw torrent::input_error("Need at least order and one field.");
-
-    torrent::Object::list_const_iterator itr = args.begin();
-    std::string order = (itr++)->as_string();
-    const char* current = order.c_str();
-
-    torrent::Object result1;
-    torrent::Object result2;
-
-    for (torrent::Object::list_const_iterator last = args.end(); itr != last; itr++) {
-        std::string field = itr->as_string();
-        result1 = rpc::parse_command_single(rpc::get_target_left(target), field);
-        result2 = rpc::parse_command_single(rpc::get_target_right(target), field);
-
-        if (result1.type() != result2.type())
-            throw torrent::input_error(std::string("Type mismatch in compare of ") + field);
-
-        bool descending = *current == 'd' || *current == 'D' || *current == '-';
-        if (*current) {
-            if (!descending && !(*current == 'a' || *current == 'A' || *current == '+'))
-                throw torrent::input_error(std::string("Bad order '") + *current + "' in " + order);
-            ++current;
-        }
-
-        switch (result1.type()) {
-            case torrent::Object::TYPE_VALUE:
-                if (result1.as_value() != result2.as_value())
-                    return (int64_t) (descending ^ (result1.as_value() < result2.as_value()));
-                break;
-
-            case torrent::Object::TYPE_STRING:
-                if (result1.as_string() != result2.as_string())
-                    return (int64_t) (descending ^ (result1.as_string() < result2.as_string()));
-                break;
-
-            default:
-                break; // treat unknown types as equal
-        }
-    }
-
-    // if all else is equal, ensure stable sort order based on memory location
-    return (int64_t) (target.second < target.third);
-}
-
-
 static std::map<int, std::string> bound_commands[ui::DownloadList::DISPLAY_MAX_SIZE];
 
 /*  @DOC
@@ -505,25 +432,6 @@ torrent::Object cmd_do(rpc::target_type target, const torrent::Object& args) {
 }
 
 
-torrent::Object retrieve_d_custom_if_z(core::Download* download, const torrent::Object::list_type& args) {
-    torrent::Object::list_const_iterator itr = args.begin();
-    if (itr == args.end())
-        throw torrent::bencode_error("d.custom.if_z: Missing key argument.");
-    const std::string& key = (itr++)->as_string();
-    if (key.empty())
-        throw torrent::bencode_error("d.custom.if_z: Empty key argument.");
-    if (itr == args.end())
-        throw torrent::bencode_error("d.custom.if_z: Missing default argument.");
-
-    try {
-        const std::string& val = download->bencode()->get_key("rtorrent").get_key("custom").get_key_string(key);
-        return val.empty() ? itr->as_string() : val;
-    } catch (torrent::bencode_error& e) {
-        return itr->as_string();
-    }
-}
-
-
 torrent::Object cmd_d_custom_set_if_z(core::Download* download, const torrent::Object::list_type& args) {
     torrent::Object::list_const_iterator itr = args.begin();
     if (itr == args.end())
@@ -563,22 +471,6 @@ torrent::Object cmd_d_custom_erase(core::Download* download, const torrent::Obje
 }
 
 
-torrent::Object retrieve_d_custom_map(core::Download* download, bool keys_only, const torrent::Object::list_type& args) {
-    if (args.begin() != args.end())
-        throw torrent::bencode_error("d.custom.keys/items takes no arguments.");
-
-    torrent::Object result = keys_only ? torrent::Object::create_list() : torrent::Object::create_map();
-    torrent::Object::map_type& entries = download->bencode()->get_key("rtorrent").get_key("custom").as_map();
-
-    for (torrent::Object::map_type::const_iterator itr = entries.begin(), last = entries.end(); itr != last; itr++) {
-        if (keys_only) result.as_list().push_back(itr->first);
-        else           result.as_map()[itr->first] = itr->second;
-    }
-
-    return result;
-}
-
-
 torrent::Object cmd_d_custom_toggle(core::Download* download, const std::string& key) {
     bool result = true;
     try {
@@ -614,43 +506,6 @@ torrent::Object retrieve_d_custom_as_value(core::Download* download, const std::
     } catch (torrent::bencode_error& e) {
         return (int64_t) 0;
     }
-}
-
-
-torrent::Object
-d_multicall_filtered(const torrent::Object::list_type& args) {
-  if (args.size() < 2)
-    throw torrent::input_error("d.multicall.filtered requires at least 2 arguments.");
-  torrent::Object::list_const_iterator arg = args.begin();
-
-  // Find the given view
-  core::ViewManager* viewManager = control->view_manager();
-  core::ViewManager::iterator viewItr = viewManager->find(arg->as_string().empty() ? "default" : arg->as_string());
-
-  if (viewItr == viewManager->end())
-    throw torrent::input_error("Could not find view '" + arg->as_string() + "'.");
-
-  // Make a filtered copy of the current item list
-  core::View::base_type dlist;
-  (*viewItr)->filter_by(*++arg, dlist);
-
-  // Generate result by iterating over all items
-  torrent::Object             resultRaw = torrent::Object::create_list();
-  torrent::Object::list_type& result = resultRaw.as_list();
-  ++arg;  // skip to first command
-
-  for (core::View::iterator item = dlist.begin(); item != dlist.end(); ++item) {
-    // Add empty row to result
-    torrent::Object::list_type& row = result.insert(result.end(), torrent::Object::create_list())->as_list();
-
-    // Call the provided commands and assemble their results
-    for (torrent::Object::list_const_iterator command = arg; command != args.end(); command++) {
-      const std::string& cmdstr = command->as_string();
-      row.push_back(rpc::parse_command(rpc::make_target(*item), cmdstr.c_str(), cmdstr.c_str() + cmdstr.size()).first);
-    }
-  }
-
-  return resultRaw;
 }
 
 
@@ -1157,33 +1012,6 @@ torrent::Object cmd_system_client_version_as_value() {
 }
 
 
-torrent::Object cmd_value(rpc::target_type target, const torrent::Object::list_type& args) {
-    if (args.size() < 1) {
-        throw torrent::input_error("'value' takes at least a number argument!");
-    }
-    if (args.size() > 2) {
-        throw torrent::input_error("'value' takes at most two arguments!");
-    }
-
-    torrent::Object::value_type val = 0;
-    if (args.front().is_value()) {
-        val = args.front().as_value();
-    } else {
-        int base = args.size() > 1 ? args.back().is_value() ?
-                   args.back().as_value() : strtol(args.back().as_string().c_str(), NULL, 10) : 10;
-        char* endptr = 0;
-
-        val = strtoll(args.front().as_string().c_str(), &endptr, base);
-        while (*endptr == ' ' || *endptr == '\n') ++endptr;
-        if (*endptr) {
-            throw torrent::input_error("Junk at end of number: " + args.front().as_string());
-        }
-    }
-
-    return val;
-}
-
-
 torrent::Object cmd_d_tracker_domain(core::Download* download) {
     return get_active_tracker_domain(download->download());
 }
@@ -1192,124 +1020,6 @@ torrent::Object cmd_d_tracker_domain(core::Download* download) {
 torrent::Object cmd_d_tracker_scrape_info(const int operation, core::Download* download) {
     return get_active_tracker_scrape_info(operation, download->download());
 }
-
-
-// MATH FUNCTIONS
-
-inline std::vector<int64_t> as_vector(const torrent::Object::list_type& args) {
-    if (args.size() == 0)
-        throw torrent::input_error("Wrong argument count in as_vector.");
-
-    std::vector<int64_t> result;
-
-    for (torrent::Object::list_const_iterator itr = args.begin(), last = args.end(); itr != last; itr++) {
-        if (itr->is_value()) {
-            result.push_back(itr->as_value());
-        } else if (itr->is_string()) {
-            result.push_back(rpc::convert_to_value(itr->as_string()));
-        } else if (itr->is_list()) {
-            std::vector<int64_t> subResult = as_vector(itr->as_list());
-            result.insert(result.end(), subResult.begin(), subResult.end());
-        } else {
-            throw torrent::input_error("Wrong type supplied to as_vector.");
-        }
-    }
-
-    return result;
-}
-
-
-int64_t apply_math_basic(const char* name, const std::function<int64_t(int64_t,int64_t)> op,
-                         const torrent::Object::list_type& args) {
-    int64_t val = 0, rhs = 0;
-    bool divides = !strcmp(name, "math.div") || !strcmp(name, "math.mod");
-
-    if (args.size() == 0)
-        throw torrent::input_error(std::string(name) + ": No arguments provided!");
-
-    for (torrent::Object::list_const_iterator itr = args.begin(), last = args.end(); itr != last; itr++) {
-        if (itr->is_value()) {
-            rhs = itr->as_value();
-        } else if (itr->is_string()) {
-            rhs = rpc::convert_to_value(itr->as_string());
-        } else if (itr->is_list()) {
-            rhs = apply_math_basic(name, op, itr->as_list());
-        } else {
-            throw torrent::input_error(std::string(name) + ": Wrong argument type");
-        }
-
-        if (divides && !rhs && itr != args.begin())
-            throw torrent::input_error(std::string(name) + ": Division by zero!");
-        val = itr == args.begin() ? rhs : op(val, rhs);
-    }
-
-    return val;
-}
-
-
-int64_t apply_arith_basic(const std::function<int64_t(int64_t,int64_t)> op,
-                          const torrent::Object::list_type& args) {
-    if (args.size() == 0)
-        throw torrent::input_error("Wrong argument count in apply_arith_basic.");
-
-    int64_t val = 0;
-
-    for (torrent::Object::list_const_iterator itr = args.begin(), last = args.end(); itr != last; itr++) {
-        if (itr->is_value()) {
-            val = itr == args.begin() ? itr->as_value()
-                                      : (op(val, itr->as_value()) ? val : itr->as_value());
-        } else if (itr->is_string()) {
-            int64_t cval = rpc::convert_to_value(itr->as_string());
-            val = itr == args.begin() ? cval : (op(val, cval) ? val : cval);
-        } else if (itr->is_list()) {
-            int64_t fval = apply_arith_basic(op, itr->as_list());
-            val = itr == args.begin() ? fval : (op(val, fval) ? val : fval);
-        } else {
-            throw torrent::input_error("Wrong type supplied to apply_arith_basic.");
-        }
-    }
-
-    return val;
-}
-
-
-int64_t apply_arith_count(const torrent::Object::list_type& args) {
-    if (args.size() == 0)
-        throw torrent::input_error("Wrong argument count in apply_arith_count.");
-
-    int64_t val = 0;
-
-    for (torrent::Object::list_const_iterator itr = args.begin(), last = args.end(); itr != last; itr++) {
-        switch (itr->type()) {
-            case torrent::Object::TYPE_VALUE:
-            case torrent::Object::TYPE_STRING:
-                val++;
-                break;
-            case torrent::Object::TYPE_LIST:
-                val += apply_arith_count(itr->as_list());
-                break;
-            default:
-                throw torrent::input_error("Wrong type supplied to apply_arith_count.");
-        }
-    }
-
-    return val;
-}
-
-int64_t apply_arith_other(const char* op, const torrent::Object::list_type& args) {
-    if (args.size() == 0)
-        throw torrent::input_error("Wrong argument count in apply_arith_other.");
-
-    if (strcmp(op, "average") == 0) {
-        return (int64_t)(apply_math_basic(op, std::plus<int64_t>(), args) / apply_arith_count(args));
-    } else if (strcmp(op, "median") == 0) {
-        std::vector<int64_t> result = as_vector(args);
-        return (int64_t)rak::median(result.begin(), result.end());
-    } else {
-        throw torrent::input_error("Wrong operation supplied to apply_arith_other.");
-    }
-}
-
 
 #if RT_HEX_VERSION <= 0x000906
 // https://github.com/rakshasa/rtorrent/commit/1f5e4d37d5229b63963bb66e76c07ec3e359ecba
@@ -1350,7 +1060,6 @@ void initialize_command_pyroscope() {
 #if RT_HEX_VERSION <= 0x000907
     // these are merged into 0.9.8+ mainline! (well, maybe, PRs are mostly ignored)
     CMD2_ANY_LIST("system.random", &apply_random);
-    CMD2_ANY_LIST("d.multicall.filtered", _cxxstd_::bind(&d_multicall_filtered, _cxxstd_::placeholders::_2));
 #endif
 
     // string.* group
@@ -1375,18 +1084,6 @@ void initialize_command_pyroscope() {
     // array.* group
     CMD2_ANY_LIST("array.at", &cmd_array_at);
 
-    // math.* group
-    CMD2_ANY_LIST("math.add", std::bind(&apply_math_basic, "math.add", std::plus<int64_t>(), std::placeholders::_2));
-    CMD2_ANY_LIST("math.sub", std::bind(&apply_math_basic, "math.sub", std::minus<int64_t>(), std::placeholders::_2));
-    CMD2_ANY_LIST("math.mul", std::bind(&apply_math_basic, "math.mul", std::multiplies<int64_t>(), std::placeholders::_2));
-    CMD2_ANY_LIST("math.div", std::bind(&apply_math_basic, "math.div", std::divides<int64_t>(), std::placeholders::_2));
-    CMD2_ANY_LIST("math.mod", std::bind(&apply_math_basic, "math.mod", std::modulus<int64_t>(), std::placeholders::_2));
-    CMD2_ANY_LIST("math.min", std::bind(&apply_arith_basic, std::less<int64_t>(), std::placeholders::_2));
-    CMD2_ANY_LIST("math.max", std::bind(&apply_arith_basic, std::greater<int64_t>(), std::placeholders::_2));
-    CMD2_ANY_LIST("math.cnt", std::bind(&apply_arith_count, std::placeholders::_2));
-    CMD2_ANY_LIST("math.avg", std::bind(&apply_arith_other, "average", std::placeholders::_2));
-    CMD2_ANY_LIST("math.med", std::bind(&apply_arith_other, "median", std::placeholders::_2));
-
     // ui.focus.* – quick paging
     CMD2_ANY("ui.focus.home", _cxxstd_::bind(&cmd_ui_focus_home));
     CMD2_ANY("ui.focus.end", _cxxstd_::bind(&cmd_ui_focus_end));
@@ -1402,24 +1099,16 @@ void initialize_command_pyroscope() {
     CMD2_ANY("system.client_version.as_value", _cxxstd_::bind(&cmd_system_client_version_as_value));
 
     // d.custom.* extensions
-    CMD2_DL_LIST("d.custom.if_z", _cxxstd_::bind(&retrieve_d_custom_if_z,
-                                                 _cxxstd_::placeholders::_1, _cxxstd_::placeholders::_2));
     CMD2_DL_LIST("d.custom.set_if_z", _cxxstd_::bind(&cmd_d_custom_set_if_z,
                                                      _cxxstd_::placeholders::_1, _cxxstd_::placeholders::_2));
     CMD2_DL_LIST("d.custom.erase", _cxxstd_::bind(&cmd_d_custom_erase,
                                                   _cxxstd_::placeholders::_1, _cxxstd_::placeholders::_2));
-    CMD2_DL_LIST("d.custom.keys", _cxxstd_::bind(&retrieve_d_custom_map,
-                                                 _cxxstd_::placeholders::_1, true, _cxxstd_::placeholders::_2));
-    CMD2_DL_LIST("d.custom.items", _cxxstd_::bind(&retrieve_d_custom_map,
-                                                 _cxxstd_::placeholders::_1, false, _cxxstd_::placeholders::_2));
     CMD2_DL_STRING("d.custom.toggle",  _cxxstd_::bind(&cmd_d_custom_toggle,
                                                       _cxxstd_::placeholders::_1, _cxxstd_::placeholders::_2));
     CMD2_DL_STRING("d.custom.as_value",  _cxxstd_::bind(&retrieve_d_custom_as_value,
                                                         _cxxstd_::placeholders::_1, _cxxstd_::placeholders::_2));
 
     // Misc commands
-    CMD2_ANY_LIST("value", &cmd_value);
-    CMD2_ANY_LIST("compare", &apply_compare);
     CMD2_ANY("ui.bind_key", &apply_ui_bind_key);
     CMD2_VAR_VALUE("ui.bind_key.verbose", 1);
     CMD2_ANY("throttle.names", _cxxstd_::bind(&cmd_throttle_names));
