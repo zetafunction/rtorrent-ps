@@ -31,13 +31,13 @@
  }
 --- a/src/ui/download_list.h
 +++ b/src/ui/download_list.h
-@@ -86,7 +86,8 @@ public:
-     INPUT_LOAD_DEFAULT,
-     INPUT_LOAD_MODIFIED,
+@@ -88,7 +88,8 @@
      INPUT_CHANGE_DIRECTORY,
--    INPUT_COMMAND
-+    INPUT_COMMAND,
-+    INPUT_FIND
+     INPUT_COMMAND,
+     INPUT_FILTER,
+-    INPUT_EOI
++    INPUT_EOI,
++    INPUT_FIND,
    } Input;
  
    DownloadList();

@@ -48,7 +48,7 @@ else
 fi
 
 # Version selection
-export RT_MINOR=7
+export RT_MINOR=8
 export LT_VERSION=0.13.$RT_MINOR; export RT_VERSION=0.9.$RT_MINOR;
 export GIT_MINOR=$(( $RT_MINOR + 1 ))  # ensure git version has a bumped version number
 export VERSION_EXTRAS=" $git_id"
@@ -105,7 +105,7 @@ export SRC_DIR=$(cd $(dirname $0) && pwd)
 LT_PATCHES=( )
 RT_PATCHES=( )
 LT_BASE_PATCHES=( $SRC_DIR/patches/lt-meh.patch )
-RT_BASE_PATCHES=( $SRC_DIR/patches/rt-base-configure.patch )
+RT_BASE_PATCHES=( )
 
 # Distro specifics
 case $(echo -n "$(lsb_release -sic 2>/dev/null || echo NonLSB)" | tr ' \n' '-') in
@@ -118,8 +118,6 @@ case $(echo -n "$(lsb_release -sic 2>/dev/null || echo NonLSB)" | tr ' \n' '-') 
     *-stretch|Fedora-TwentySix)
         ;;
     *-buster)
-        BUILD_PKG_DEPS+=( gcc-7 g++-7 )
-        export CC=gcc-7 CXX=g++-7
         ;;
     Arch-*) # 0.9.[46] only!
         BUILD_PKG_DEPS=( ncurses openssl cppunit )
@@ -271,9 +269,8 @@ esac
 #   http://pkgs.fedoraproject.org/repo/pkgs/libtorrent/
 #   http://pkgs.fedoraproject.org/repo/pkgs/rtorrent/
 TARBALLS+=(
-"https://rtorrent.net/downloads/libtorrent-$LT_VERSION.tar.gz"
-"http://rtorrent.net/downloads/rtorrent-$RT_VERSION.tar.gz"
-# "https://bintray.com/artifact/download/pyroscope/rtorrent-ps/rtorrent-$RT_VERSION.tar.gz"
+"https://github.com/rakshasa/rtorrent-archive/raw/master/libtorrent-$LT_VERSION.tar.gz"
+"https://github.com/rakshasa/rtorrent-archive/raw/master/rtorrent-$RT_VERSION.tar.gz"
 )
 
 BUILD_CMD_DEPS=$(cat <<.
