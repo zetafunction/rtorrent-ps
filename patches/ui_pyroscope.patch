@@ -37,11 +37,26 @@
 +  bool ui_pyroscope_download_list_redraw(Window* window, display::Canvas* canvas, core::View* view);
 +  if (ui_pyroscope_download_list_redraw(this, m_canvas, m_view)) return;
    if (m_view->empty_visible() || m_canvas->width() < 5 || m_canvas->height() < 2)
-@@ -107,2 +109,4 @@
+@@ -141,6 +141,9 @@
+       print_download_status(buffer, last, *range.first);
+       m_canvas->print(0, pos++, "%c %s", range.first == m_view->focus() ? '*' : ' ', buffer);
  
-+    void ui_pyroscope_download_list_redraw_item(Window* window, display::Canvas* canvas, core::View* view, int pos, Range& range);
-+    ui_pyroscope_download_list_redraw_item(this, m_canvas, m_view, pos, range);
-     ++range.first;
++      void ui_pyroscope_download_list_redraw_item(Window* window, display::Canvas* canvas, core::View* view, int pos, Range& range);
++      ui_pyroscope_download_list_redraw_item(this, m_canvas, m_view, pos, range);
++
+       range.first++;
+     }
+ 
+@@ -150,6 +153,9 @@
+       m_canvas->set_default_attributes(range.first == m_view->focus() ? A_REVERSE : A_NORMAL);
+       m_canvas->print(0, pos++, "%c %s", range.first == m_view->focus() ? '*' : ' ', buffer);
+ 
++      void ui_pyroscope_download_list_redraw_item(Window* window, display::Canvas* canvas, core::View* view, int pos, Range& range);
++      ui_pyroscope_download_list_redraw_item(this, m_canvas, m_view, pos, range);
++
+       range.first++;
+     }
+   }
 --- orig/src/display/canvas.cc	2009-11-12 09:03:47.000000000 +0100
 +++ rtorrent-0.8.6/src/display/canvas.cc	2011-05-30 21:07:29.000000000 +0200
 @@ -94,2 +94,4 @@
